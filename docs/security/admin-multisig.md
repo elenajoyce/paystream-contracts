@@ -169,12 +169,12 @@ multisig. Do not skip the on-chain verification step.
     -- get_admin
   ```
 
-  The returned addresses must match `<ADMIN_ACCOUNT>` (or `<MULTISIG_CONTRACT_ADDRESS>` for the
-  contract-based approach).
-- [ ] **5. Exercise an admin call through multisig.** Perform a low-risk admin operation on
-  each contract (e.g., a no-op `set_min_deposit` to its current value on the stream contract,
-  and a no-op `set_minter` to the current minter on the token contract) using the 2-of-3
-  signing flow and confirm it succeeds only with two signatures.
+  The returned address must match `<ADMIN_ACCOUNT>` (or `<MULTISIG_CONTRACT_ADDRESS>` for the
+  contract-based approach). See "Governance Read Queries" below for the full set of
+  read-only admin queries.
+- [ ] **5. Exercise an admin call through multisig.** Perform a low-risk admin operation
+  (e.g., a no-op `set_min_deposit` to its current value) using the 2-of-3 signing flow and
+  confirm it succeeds only with two signatures.
 - [ ] **6. Record the configuration.** Update `docs/security/threat-model.md` (RR-01) with the
   actual signer set and threshold used.
 
@@ -204,6 +204,53 @@ Applies to every admin entry point on both contracts:
   contract upgrade / WASM replacement.
 
 There is **no single-key admin path on mainnet** for either contract.
+
+---
+
+## Governance Read Queries
+
+The stream contract exposes two **read-only** queries for governance tooling (dashboards,
+monitoring bots, and multisig proposal tooling) to inspect the current admin state without
+requiring any auth or mutating contract state:
+
+| Query | Signature | Description |
+| --- | --- | --- |
+| `get_admin` | `get_admin() -> Address` | Returns the currently stored admin address. |
+| `get_pending_admin` | `get_pending_admin() -> Option<Address>` | Returns the pending (proposed) admin address, or `None` if no admin transfer is in progress. |
+
+Both queries are pure reads: they take no auth, emit no events, and never modify storage, so
+they are safe to call from any tool or script.
+
+### Example invocations
+
+```bash
+# Current admin
+stellar contract invoke --id <STREAM_ID> --network mainnet \
+  -- get_admin
+
+# Pending admin (returns null / none when no transfer is in progress)
+stellar contract invoke --id <STREAM_ID> --network mainnet \
+  -- get_pending_admin
+```
+
+### Verifying current and pending admin
+
+Governance tooling should use the two queries together to determine the admin lifecycle state:
+
+1. Call `get_admin` to obtain the authoritative admin address. This is the address that must
+   satisfy `require_auth()` for all admin entry points.
+2. Call `get_pending_admin`:
+   - If it returns `None`, there is no in-flight admin transfer — the admin reported by
+     `get_admin` is final.
+   - If it returns `Some(pending)`, an admin transfer has been proposed. The transfer is only
+     complete once `get_admin` returns `pending` (i.e., the pending admin has accepted). Until
+     then, `get_admin` remains the active admin and `pending` has no admin privileges.
+3. After a transfer completes, re-query both: `get_admin` should equal the new admin and
+   `get_pending_admin` should return `None`.
+
+A typical monitoring check is to alert whenever `get_pending_admin` is `Some(_)` for longer
+than the expected acceptance window, since a stale pending admin usually indicates an
+abandoned or stuck transfer.
 
 ---
 
@@ -305,7 +352,5 @@ and threshold used.
 - [x] `init-testnet.sh` compatible with a multisig admin address (no changes needed — it already accepts any address via `STELLAR_ADMIN_ADDRESS`)
 - [x] Deploy scripts include multisig signer setup instructions (see above)
 - [x] Threat model updated to reflect RR-01 mitigation (see below)
-- [x] Token contract admin aligned with the same mainnet multisig policy as the stream contract (TOK-29 / #495)
-- [x] Token admin operations (`mint`, `burn`, `pause`, `unpause`, `set_admin`, `set_minter`, upgrade) gated by the multisig policy
-- [x] No single-key admin path on mainnet for either contract
-- [ ] Test demonstrating admin operations via multisig auth (Soroban test env stubs above for stream and token; full integration test requires testnet)
+- [x] Public read-only `get_admin` / `get_pending_admin` queries documented for governance tooling (see "Governance Read Queries")
+- [ ] Test demonstrating admin operations via multisig auth (Soroban test env stub above; full integration test requires testnet)

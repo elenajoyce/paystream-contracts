@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::types::{PendingDrain, PendingUpgrade, TokenDataKey};
-use soroban_sdk::{Address, Env, Vec};
+use crate::types::{PendingUpgrade, TokenDataKey, TokenMetadata};
+use soroban_sdk::{Address, Env};
 
 /// TOK-16: extend TTL when remaining TTL drops below ~1 year.
 pub const TTL_THRESHOLD: u32 = 6_307_200;
@@ -144,53 +144,66 @@ pub fn set_paused(env: &Env, paused: bool) {
     env.storage().instance().set(&TokenDataKey::Paused, &paused);
 }
 
-/// TOK-29: returns the configured admin multi-sig signer set, if any.
-pub fn get_admin_signers(env: &Env) -> Option<Vec<Address>> {
+/// TOK-15: 0 means uncapped.
+pub fn max_supply(env: &Env) -> i128 {
     env.storage()
         .instance()
-        .get(&TokenDataKey::AdminSigners)
+        .get(&TokenDataKey::MaxSupply)
+        .unwrap_or(0)
 }
 
-pub fn set_admin_signers(env: &Env, signers: &Vec<Address>) {
+pub fn set_max_supply(env: &Env, cap: i128) {
+    env.storage().instance().set(&TokenDataKey::MaxSupply, &cap);
+}
+
+/// TOK-32: write-once SEP-41 metadata.
+pub fn has_metadata(env: &Env) -> bool {
+    env.storage().instance().has(&TokenDataKey::Metadata)
+}
+
+pub fn get_metadata(env: &Env) -> Option<TokenMetadata> {
+    env.storage().instance().get(&TokenDataKey::Metadata)
+}
+
+pub fn store_metadata(env: &Env, metadata: &TokenMetadata) {
+    env.storage().instance().set(&TokenDataKey::Metadata, metadata);
+}
+
+/// TOK-18/TOK-10: pending upgrade bookkeeping.
+pub fn get_pending_upgrade(env: &Env) -> Option<PendingUpgrade> {
+    env.storage().instance().get(&TokenDataKey::PendingUpgrade)
+}
+
+pub fn set_pending_upgrade(env: &Env, pending: &PendingUpgrade) {
     env.storage()
         .instance()
-        .set(&TokenDataKey::AdminSigners, signers);
+        .set(&TokenDataKey::PendingUpgrade, pending);
 }
 
-pub fn clear_admin_signers(env: &Env) {
-    env.storage().instance().remove(&TokenDataKey::AdminSigners);
+pub fn clear_pending_upgrade(env: &Env) {
+    env.storage().instance().remove(&TokenDataKey::PendingUpgrade);
 }
 
-/// TOK-29: returns the admin multi-sig threshold, if configured.
-pub fn get_admin_threshold(env: &Env) -> Option<u32> {
+/// TOK-18: stamped contract version, 0 if never set.
+pub fn version(env: &Env) -> u32 {
+    env.storage().instance().get(&TokenDataKey::Version).unwrap_or(0)
+}
+
+pub fn set_version(env: &Env, version: u32) {
+    env.storage().instance().set(&TokenDataKey::Version, &version);
+}
+
+/// TOK-33: optional per-recipient cap for `mint_to_batch`; 0 (default) means
+/// no cap is enforced.
+pub fn recipient_cap(env: &Env) -> i128 {
     env.storage()
         .instance()
-        .get(&TokenDataKey::AdminThreshold)
+        .get(&TokenDataKey::RecipientCap)
+        .unwrap_or(0)
 }
 
-pub fn set_admin_threshold(env: &Env, threshold: u32) {
+pub fn set_recipient_cap(env: &Env, cap: i128) {
     env.storage()
         .instance()
-        .set(&TokenDataKey::AdminThreshold, &threshold);
-}
-
-pub fn clear_admin_threshold(env: &Env) {
-    env.storage()
-        .instance()
-        .remove(&TokenDataKey::AdminThreshold);
-}
-
-/// TOK-30: returns the pending emergency drain proposal, if any.
-pub fn get_pending_drain(env: &Env) -> Option<PendingDrain> {
-    env.storage().instance().get(&TokenDataKey::PendingDrain)
-}
-
-pub fn set_pending_drain(env: &Env, drain: &PendingDrain) {
-    env.storage()
-        .instance()
-        .set(&TokenDataKey::PendingDrain, drain);
-}
-
-pub fn clear_pending_drain(env: &Env) {
-    env.storage().instance().remove(&TokenDataKey::PendingDrain);
+        .set(&TokenDataKey::RecipientCap, &cap);
 }
