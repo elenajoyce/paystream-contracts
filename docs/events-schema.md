@@ -40,6 +40,12 @@ Each entry lists the event, the change (added field / renamed topic / removed fi
 | `thresh_up` | Clarified: emitted once per stream by both `set_low_balance_threshold` and the new `set_low_balance_threshold_batch` (1..=50 streams, all-or-nothing) | No topic/data change. Indexers may see multiple `thresh_up` events per transaction; key on `topic[2]` (stream_id) |
 | `cliff` | Clarified: `LinearVest` streams with a cliff emit `cliff_reached` once at the cliff boundary and accrue from the cliff, matching payroll streams | No topic/data change. No migration required |
 
+### v1.1 (2026-10-04) — batch expire summary
+
+| Event | Change | Migration |
+|-------|--------|-----------|
+| `exp_batch` | Added event `streams_expired_batch` (topic `["v1", "exp_batch"]`, data `[expired: u32, skipped: u32]`) | Additive: no existing event, topic or data field changed. Indexers that do not handle `exp_batch` can ignore it; per-stream `expired` events are unchanged |
+
 <!-- Template for new entries:
 ### vX.Y (YYYY-MM-DD)
 | Event | Change | Migration |
